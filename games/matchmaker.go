@@ -1,41 +1,54 @@
 package games
 
 import (
+	"context"
 	"errors"
+
+	"github.com/suryapandian/matchmaker/config"
 	"github.com/suryapandian/matchmaker/users"
 
 	"github.com/sirupsen/logrus"
 )
 
 type Matchmaker struct {
-	waitingPlayers  chan string
-	stopMatchMaking chan bool
-	maximumPlayers  int
-	Games           GameStore
-	Players         users.PlayerStore
-	logger          *logrus.Entry
+	waitingPlayers map[string]chan string
+	ctx            context.Context
+	cancel         context.CancelFunc
+	maximumPlayers int
+	Games          GameStore
+	Players        users.PlayerStore
+	logger         *logrus.Entry
 }
 
 func NewMatchmaker(maximumPlayers int, logger *logrus.Entry) *Matchmaker {
+	ctx, cancel := context.WithCancel(context.Background())
+	waitingPlayers := make(map[string]chan string)
+	for gameType := range config.GAME_CONFIGS {
+		waitingPlayers[gameType] = make(chan string, maximumPlayers)
+	}
+
 	return &Matchmaker{
-		waitingPlayers:  make(chan string, maximumPlayers),
-		stopMatchMaking: make(chan bool),
-		maximumPlayers:  maximumPlayers,
-		Games:           NewGame(),
-		Players:         users.NewPlayer(),
-		logger:          logger,
+		waitingPlayers: waitingPlayers,
+		maximumPlayers: maximumPlayers,
+		ctx:            ctx,
+		cancel:         cancel,
+		Games:          NewGame(),
+		Players:        users.NewPlayer(),
+		logger:         logger,
 	}
 }
 
 func (m *Matchmaker) Start() {
-	go m.start()
+	for gameType := range config.GAME_CONFIGS {
+		go m.start(m.waitingPlayers[gameType], m.ctx)
+	}
 }
 
-func (m *Matchmaker) start() {
+func (m *Matchmaker) start(waitingPlayers <-chan string, ctx context.Context) {
 	var players []string
 	for {
 		select {
-		case player := <-m.waitingPlayers:
+		case player := <-waitingPlayers:
 			players = append(players, player)
 			m.logger.Infof("Players trying to start %v", players)
 
@@ -48,7 +61,7 @@ func (m *Matchmaker) start() {
 			}
 			m.logger.WithField("game session id", gameSession.ID).WithField("players", gameSession.Players).Infoln("game session")
 			players = []string{}
-		case <-m.stopMatchMaking:
+		case <-ctx.Done():
 			return
 		}
 	}
@@ -58,8 +71,11 @@ var (
 	ErrMaximumPlayers = errors.New("maximum players are playing in this instance.")
 )
 
-func (m *Matchmaker) Join(playerID string) (gameID string, err error) {
-	m.logger.WithField("playerId", playerID).Infoln("player trying to join")
+func (m *Matchmaker) Join(playerID, gameType string) (gameID string, err error) {
+	if gameType == "" {
+		gameType = config.GameTypeDefault
+	}
+	m.logger.WithField("playerId", playerID).WithField("gameType", gameType).Infoln("player trying to join")
 
 	player, err := m.Players.GetPlayerDetails(playerID)
 	switch err {
@@ -79,8 +95,8 @@ func (m *Matchmaker) Join(playerID string) (gameID string, err error) {
 		return "", ErrMaximumPlayers
 	}
 
-	m.logger.WithField("playerId", playerID).Infoln("player waiting to join")
-	m.waitingPlayers <- playerID
+	m.logger.WithField("playerId", playerID).WithField("gameType", gameType).Infoln("player waiting to join")
+	m.waitingPlayers[gameType] <- playerID
 	return "", ErrInadequatePlayers
 }
 
@@ -121,7 +137,7 @@ func (m *Matchmaker) endGame(id, leavingPlayerID string) error {
 			continue
 		}
 
-		_, err = m.Join(player)
+		_, err = m.Join(player, gameSession.Type)
 		if err == ErrInadequatePlayers {
 			continue
 		}
@@ -134,5 +150,5 @@ func (m *Matchmaker) endGame(id, leavingPlayerID string) error {
 }
 
 func (m *Matchmaker) Stop() {
-	m.stopMatchMaking <- true
+	m.cancel()
 }

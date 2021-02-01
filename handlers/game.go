@@ -41,7 +41,8 @@ func (g *gameRouter) join(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &cookie)
 	}
 
-	gameID, err := g.matchmaker.Join(playerID)
+	gameType := r.URL.Query().Get("type")
+	gameID, err := g.matchmaker.Join(playerID, gameType)
 
 	switch err {
 	case games.ErrMaximumPlayers:

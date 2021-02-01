@@ -8,6 +8,7 @@ import (
 	"github.com/suryapandian/matchmaker/logger"
 	"github.com/suryapandian/matchmaker/users"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -32,7 +33,7 @@ func (t *MatchMakerTestSuite) SetupTest() {
 func (t *MatchMakerTestSuite) TestJoin() {
 	clearGames(t.matchmaker)
 
-	_, err := t.matchmaker.Join("")
+	_, err := t.matchmaker.Join("", "")
 	t.Equal(users.ErrInvalidPlayerID, err, "should register and join as new player")
 
 	var players []string
@@ -41,18 +42,18 @@ func (t *MatchMakerTestSuite) TestJoin() {
 		playerID := t.matchmaker.Players.Register()
 		players = append(players, playerID)
 
-		t.matchmaker.Join(playerID)
+		t.matchmaker.Join(playerID, "")
 	}
 
 	time.Sleep(2 * time.Second)
 	for i := 0; i < t.maximumPlayers; i++ {
-		gameID, err := t.matchmaker.Join(players[i])
+		gameID, err := t.matchmaker.Join(players[i], "")
 		t.NoError(err, "should start game")
 		t.NotEmpty(gameID)
 	}
 
 	playerID := t.matchmaker.Players.Register()
-	_, err = t.matchmaker.Join(playerID)
+	_, err = t.matchmaker.Join(playerID, "")
 	t.Equal(ErrMaximumPlayers, err, "should throw error on reaching max players per instance")
 }
 
@@ -64,11 +65,11 @@ func (t *MatchMakerTestSuite) TestLeave() {
 		playerID := t.matchmaker.Players.Register()
 		players = append(players, playerID)
 
-		t.matchmaker.Join(playerID)
+		t.matchmaker.Join(playerID, "")
 	}
 
 	time.Sleep(2 * time.Second)
-	gameID, err := t.matchmaker.Join(players[0])
+	gameID, err := t.matchmaker.Join(players[0], "")
 	t.NoError(err, "should start game session")
 
 	game, err := t.matchmaker.Games.GetGameByID(gameID)
@@ -93,10 +94,10 @@ func (t *MatchMakerTestSuite) TestLeave() {
 
 	//Check if other players are in queue by joining just one another player
 	playerID := t.matchmaker.Players.Register()
-	t.matchmaker.Join(playerID)
+	t.matchmaker.Join(playerID, "")
 
 	time.Sleep(2 * time.Second)
-	gameID, err = t.matchmaker.Join(playerID)
+	gameID, err = t.matchmaker.Join(playerID, "")
 	t.NoError(err, "new game should have started for the other players who have not left")
 	t.NotEmpty(gameID)
 }
@@ -117,4 +118,49 @@ func (t *MatchMakerTestSuite) TearDownSuite() {
 
 func TestMatchMakerSuite(t *testing.T) {
 	suite.Run(t, new(MatchMakerTestSuite))
+}
+
+func TestMultiTypeMatchMaker(t *testing.T) {
+	maximumPlayers := 6
+	testGameType := "testGameType"
+	config.GAME_CONFIGS[config.GameTypeDefault] = config.GameConfig{AllowedPlayers: 3}
+	config.GAME_CONFIGS[testGameType] = config.GameConfig{AllowedPlayers: 3}
+
+	matchmaker := NewMatchmaker(
+		maximumPlayers,
+		logger.LogEntryWithRef(),
+	)
+	matchmaker.Start()
+
+	clearGames(matchmaker)
+
+	var players []string
+	for i := 0; i < config.GAME_CONFIGS[config.GameTypeDefault].AllowedPlayers; i++ {
+		playerID := matchmaker.Players.Register()
+		players = append(players, playerID)
+
+		matchmaker.Join(playerID, config.GameTypeDefault)
+	}
+
+	a := assert.New(t)
+	time.Sleep(2 * time.Second)
+	_, err := matchmaker.Join(players[0], "")
+	a.NoError(err, "should start game session")
+
+	players = []string{}
+	for i := 0; i < config.GAME_CONFIGS[testGameType].AllowedPlayers; i++ {
+		playerID := matchmaker.Players.Register()
+		players = append(players, playerID)
+
+		matchmaker.Join(playerID, testGameType)
+	}
+
+	time.Sleep(2 * time.Second)
+	_, err = matchmaker.Join(players[0], testGameType)
+	a.NoError(err, "should start game session")
+
+	playerID := matchmaker.Players.Register()
+	_, err = matchmaker.Join(playerID, config.GameTypeDefault)
+	a.Equal(ErrMaximumPlayers, err, "should throw error on reaching max players per instance")
+
 }
