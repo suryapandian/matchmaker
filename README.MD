@@ -12,6 +12,7 @@ The matchmaker keeps reading from the channel and begins a new game session when
 
 The game sessions and players data are stored in-memory using go's `sync.Map`, sync.Map is chosen to avoid race during parallel requests.
 
+Mutliple game configs can be loaded as environment variables at the time of server start to support for many game types.
 
 There are three endpoints to the server:
 - /games/join
