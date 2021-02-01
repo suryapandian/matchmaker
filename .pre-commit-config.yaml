@@ -1,0 +1,9 @@
+repos:
+- repo: git://github.com/dnephin/pre-commit-golang
+# Stable release v0.3.3
+  rev: v0.3.3 
+  hooks:
+    - id: go-fmt
+      exclude: vendor/*
+    - id: go-unit-tests
+    - id: go-build
