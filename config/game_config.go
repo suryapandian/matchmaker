@@ -5,6 +5,10 @@ import (
 	"strconv"
 )
 
+type GameConfig struct {
+	AllowedPlayers int
+}
+
 var (
 	MAX_PLAYERS_PER_INSTANCE int
 	ALLOWED_PLAYERS_COUNT    int

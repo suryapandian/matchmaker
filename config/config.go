@@ -9,10 +9,6 @@ var (
 	LOG_LEVEL string
 )
 
-type GameConfig struct {
-	AllowedPlayers int
-}
-
 func init() {
 	PORT = os.Getenv("PORT")
 	if PORT == "" {
