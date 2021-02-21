@@ -1,4 +1,8 @@
-### A simple matchmaking server!
+### Matchmaker
+
+When a player loads a game its game client sends a join request to the matchmaking service to let it know that the player wants to play the game and it awaits the game to start. As soon as there are 4 awaiting players the matchmaking service creates a new game session for them.
+When a player closes a game its game client sends a leave request to the matchmaking service. If the player was in a game then the game ends for all other 3 players and they automatically start waiting for the next game to start.
+There is a limit of 100 connected players per each deployed instance of the matchmaking service and we would like to have a /sessions endpoint which returns json list of running games with players ids per each game.
 
 ## Design
 
